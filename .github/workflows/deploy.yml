@@ -1,0 +1,36 @@
+name: Deploy to Namecheap Hosting
+
+on:
+  push:
+    branches:
+      - main  # Triggers deployment when code is pushed to main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Next.js App
+        run: npm run build
+
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@4.3.0
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_ROOT }}/
+          local-dir: .next/  # Adjust based on Next.js output directory
+          protocol: ftp
+          port: ${{ secrets.FTP_PORT }}
+          exclude: |
+            **/.git*
+            **/node_modules/**
+            **/.next/cache/**
+
