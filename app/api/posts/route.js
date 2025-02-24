@@ -1,38 +1,43 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // Only for server-side
 
-export async function GET() {
-  const { data, error } = await supabase.from("posts").select("*");
-
-  if (error) {
-    console.error("Supabase Error:", error.message); // ✅ Log error
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 }); // ✅ Return error
-  }
-
-  return new Response(JSON.stringify(data), { status: 200 });
+// Prevent missing environment variables
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Supabase environment variables are missing");
 }
 
-export async function POST(req) {
+// Use `anon` key for public reads
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export default async function handler(req, res) {
   try {
-    const { text, user_email } = await req.json();
-    if (!text || !user_email) {
-      return new Response(JSON.stringify({ error: "Missing fields" }), { status: 400 });
+    if (req.method === "GET") {
+      const { data, error } = await supabase.from("posts").select("*");
+      if (error) throw error;
+      return res.status(200).json(data);
     }
 
-    const { data, error } = await supabase.from("posts").insert([{ text, user_email }]);
+    if (req.method === "POST") {
+      // Use the Service Role Key **only for secure server-side mutations**
+      if (!supabaseServiceKey) {
+        return res.status(403).json({ error: "Missing Supabase Service Role Key" });
+      }
 
-    if (error) {
-      console.error("Insert Error:", error.message); // ✅ Log error
-      return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+      const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+      const { title, content } = req.body;
+      
+      const { data, error } = await supabaseAdmin.from("posts").insert([{ title, content }]);
+
+      if (error) throw error;
+      return res.status(201).json(data);
     }
 
-    return new Response(JSON.stringify({ success: true, post: data[0] }), { status: 201 });
-  } catch (err) {
-    console.error("Unexpected API Error:", err); // ✅ Catch unexpected errors
-    return new Response(JSON.stringify({ error: "Internal Server Error" }), { status: 500 });
+    return res.status(405).json({ error: "Method Not Allowed" });
+  } catch (error) {
+    console.error("Error in /api/posts:", error);
+    return res.status(500).json({ error: error.message });
   }
 }
